@@ -1,7 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
+# --- FINALE KORREKTUR: GoogleSearch wird NICHT importiert ---
 from google.generativeai.types import Tool, GenerationConfig, HarmCategory, HarmBlockThreshold
-from google.generativeai.types import GoogleSearch
 import os
 import json
 import requests
@@ -44,8 +44,8 @@ st.markdown("""<style>.stApp { background-color: #000000; color: #E0E0E0; } .mob
 def run_tactical_scan(query_text, count_val, style_val, gain_val):
     try:
         sys_prompt = f"DU BIST 'DARK KNIGHT CHILD'. EINE MOBILE TAKTISCHE KI-EINHEIT. NUTZE GOOGLE SEARCH FÜR AKTUELLE DATEN. Formatiere als Markdown-Liste. Liefere exakt {count_val} Punkte. MODUS: {style_val}."
-        # --- KORREKTUR: Umstellung auf 'gemini-flash-latest' ---
-        model = genai.GenerativeModel('gemini-flash-latest', system_instruction=sys_prompt, tools=[Tool(google_search=GoogleSearch())])
+        # --- FINALE KORREKTUR: Tool-Aktivierung via leerem Objekt ---
+        model = genai.GenerativeModel('gemini-pro', system_instruction=sys_prompt, tools=[Tool(google_search={})])
         temp = 0.7 if style_val != "AMARONE" else 1.1
         response = model.generate_content(query_text, generation_config=GenerationConfig(temperature=temp * (gain_val/100)))
         return response.text
@@ -68,14 +68,12 @@ def search_google(query):
 
 def run_forensic_verification(input_data, input_type):
     system_prompt = f"DU BIST 'DARK KNIGHT CHILD' IM FORENSIK-MODUS. OUTPUT FORMAT (NUR JSON): {{ \"fake_suspicion\": \"Gering|Mittel|Hoch|Kritisch\", \"verdict\": \"...\", \"evidence_chain\": [\"...\"] }}"
-    # --- KORREKTUR: Umstellung auf 'gemini-pro' für JSON-Stabilität ---
     model = genai.GenerativeModel('gemini-pro', system_instruction=system_prompt)
     full_prompt = ""
     try:
         if input_type in ["text", "url"]:
             text = fetch_url_content(input_data) if input_type == "url" else input_data
-            # --- KORREKTUR: Umstellung auf 'gemini-flash-latest' ---
-            claims_model = genai.GenerativeModel('gemini-flash-latest')
+            claims_model = genai.GenerativeModel('gemini-pro')
             claims_response = claims_model.generate_content(f"Extrahiere die 3 wichtigsten, überprüfbaren Behauptungen aus diesem Text. TEXT: {text[:2000]}")
             claims = claims_response.text
             evidence = ""
