@@ -1,0 +1,103 @@
+import streamlit as st
+import google.generativeai as genai
+import os
+
+# 1. KONFIGURATION (Mobile Optimized)
+st.set_page_config(page_title="DK Child", page_icon="🦇", layout="centered")
+
+# 2. API-SETUP (Hybrid: Secrets für Cloud, Env für Lokal)
+try:
+    # Versuch, Key aus Streamlit Cloud Secrets zu laden
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    # Fallback auf lokale Umgebungsvariable
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+
+if API_KEY:
+    genai.configure(api_key=API_KEY)
+else:
+    st.error("⚠️ KEY FEHLT. Config prüfen.")
+
+# 3. MOBILE CSS (Dark Mode & Touch-Optimiert)
+st.markdown("""
+    <style>
+    .stApp { background-color: #000000; color: #E0E0E0; }
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
+    
+    /* TITEL */
+    .mobile-title {
+        font-family: 'Courier New', monospace;
+        font-size: 1.5rem; text-align: center; color: #888;
+        letter-spacing: 3px; margin-bottom: 15px; border-bottom: 1px solid #333;
+        padding-bottom: 10px;
+    }
+    
+    /* INPUTS */
+    .stTextInput input, .stTextArea textarea {
+        background-color: #111 !important; color: #FFF !important;
+        border: 1px solid #333 !important; border-radius: 8px;
+    }
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #007BFF !important;
+    }
+    
+    /* BUTTON (Groß für Daumen) */
+    .stButton>button {
+        background: #007BFF !important; color: white !important;
+        width: 100%; height: 3.5em; border-radius: 8px;
+        font-weight: bold; font-size: 1.1rem; border: none;
+        text-transform: uppercase; letter-spacing: 2px;
+    }
+    
+    /* OUTPUT */
+    .mobile-output {
+        background-color: #0a0a0a; padding: 15px; border-radius: 8px;
+        border-left: 3px solid #007BFF; font-family: sans-serif; 
+        line-height: 1.5; font-size: 0.95rem; margin-top: 20px;
+    }
+    
+    /* HIDE CLUTTER */
+    header, footer, #MainMenu { visibility: hidden; }
+    div[data-testid="stExpander"] { background-color: #0a0a0a; border: 1px solid #333; border-radius: 8px; }
+    </style>
+""", unsafe_allow_html=True)
+
+# 4. INTERFACE
+st.markdown('<div class="mobile-title">DK CHILD</div>', unsafe_allow_html=True)
+
+# Kompakte Einstellungen
+with st.expander("⚙️ TAKTIK (GAIN / MODUS)"):
+    gain = st.slider("Tiefe", 0, 100, 90)
+    style = st.select_slider("Modus", options=["TROCKEN", "FORENSISCH", "AMARONE"], value="FORENSISCH")
+
+# Input
+query = st.text_area("SIGNAL", height=120, placeholder="Befehl eingeben...")
+
+# 5. LOGIK
+if st.button("SENDEN"):
+    if not query:
+        st.warning("Leeres Signal.")
+    else:
+        try:
+            # Konstruktion der Identität (Light Version)
+            sys_prompt = f"""
+            DU BIST 'DARK KNIGHT CHILD'. EINE MOBILE TAKTISCHE KI-EINHEIT VON SEKTOR 7.
+            ANTWORTE KURZ, PRÄZISE, OHNE FLOSKELN. FORMATIERE FÜR MOBILE LESBARKEIT.
+            MODUS: {style}. KONTEXT: JANUAR 2026.
+            """
+            
+            model = genai.GenerativeModel("gemini-2.5-pro", system_instruction=sys_prompt)
+            
+            # Berechnung Temperatur
+            temp = 0.7 if style != "AMARONE" else 1.1
+            
+            with st.spinner("Uplink..."):
+                response = model.generate_content(
+                    query, 
+                    generation_config={"temperature": temp * (gain/100), "max_output_tokens": 1500}
+                )
+            
+            st.markdown(f'<div class="mobile-output">{response.text}</div>', unsafe_allow_html=True)
+            
+        except Exception as e:
+            st.error(f"OFFLINE: {e}")
