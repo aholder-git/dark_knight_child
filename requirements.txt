@@ -1,2 +1,7 @@
 streamlit
 google-generativeai
+requests
+beautifulsoup4
+serpapi
+Pillow
+# Rebuild Trigger v1.1
