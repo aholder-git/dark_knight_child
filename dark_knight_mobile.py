@@ -6,7 +6,6 @@ import os
 import json
 import requests
 from bs4 import BeautifulSoup
-from serpapi import GoogleSearch as SerpApiSearch
 from PIL import Image
 import io
 from datetime import datetime
@@ -31,16 +30,13 @@ if not check_password(): st.stop()
 # 2. API-SETUP & MODELL-INITIALISIERUNG
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
-    SERPAPI_API_KEY = st.secrets["SERPAPI_API_KEY"]
     genai.configure(api_key=API_KEY)
-
-    # --- FINALE KORREKTUR: Konsistente Modell-Initialisierung ---
-    # Modell für taktischen Scan (mit Google Search Tool)
+    # --- FINALE ARCHITEKTUR: Alle Modelle werden hier zentral initialisiert ---
     model_scan = genai.GenerativeModel('gemini-pro', tools=[Tool(google_search={})])
-    # Modell für Forensik (ohne Tools)
     model_forensic = genai.GenerativeModel('gemini-pro')
-    # Modell für Claim-Extraktion (ohne Tools)
     model_claims = genai.GenerativeModel('gemini-pro')
+    # --- NEU: Verifikationsmodell mit nativem Google Search ---
+    model_verifier = genai.GenerativeModel('gemini-pro', tools=[Tool(google_search={})])
 
 except Exception as e:
     st.error(f"FATALER FEHLER BEI DER INITIALISIERUNG: {e}")
@@ -53,7 +49,6 @@ st.markdown("""<style>.stApp { background-color: #000000; color: #E0E0E0; } .mob
 def run_tactical_scan(query_text, count_val, style_val, gain_val):
     try:
         sys_prompt = f"DU BIST 'DARK KNIGHT CHILD'. EINE MOBILE TAKTISCHE KI-EINHEIT. NUTZE GOOGLE SEARCH FÜR AKTUELLE DATEN. Formatiere als Markdown-Liste. Liefere exakt {count_val} Punkte. MODUS: {style_val}."
-        # --- FINALE KORREKTUR: System Prompt wird hier übergeben ---
         model_with_prompt = genai.GenerativeModel('gemini-pro', system_instruction=sys_prompt, tools=[Tool(google_search={})])
         temp = 0.7 if style_val != "AMARONE" else 1.1
         response = model_with_prompt.generate_content(query_text, generation_config=GenerationConfig(temperature=temp * (gain_val/100)))
@@ -68,13 +63,6 @@ def fetch_url_content(url):
         return " ".join(t.strip() for t in soup.get_text().split())
     except Exception as e: return f"Fehler beim Abrufen der URL: {e}"
 
-def search_google(query):
-    try:
-        params = {"api_key": SERPAPI_API_KEY, "engine": "google", "q": query}
-        search = SerpApiSearch(params); results = search.get_dict()
-        return "\n".join([res.get('snippet', '') for res in results.get('organic_results', [])])
-    except Exception as e: return f"Google-Suche fehlgeschlagen: {e}"
-
 def run_forensic_verification(input_data, input_type):
     try:
         full_prompt = ""
@@ -82,15 +70,22 @@ def run_forensic_verification(input_data, input_type):
             text = fetch_url_content(input_data) if input_type == "url" else input_data
             claims_response = model_claims.generate_content(f"Extrahiere die 3 wichtigsten, überprüfbaren Behauptungen aus diesem Text. TEXT: {text[:2000]}")
             claims = claims_response.text
-            evidence = ""
-            for claim in claims.split('\n'):
-                if len(claim) > 10: evidence += f"BEHAUPTUNG: '{claim}'\nSUCHERGEBNISSE:\n{search_google(claim)}\n---\n"
-            full_prompt = f"SUBSTANZ (TEXT):\n{text[:2000]}\n\nBEWEISMATERIAL (SUCHERGEBNISSE):\n{evidence}"
+
+            # --- ARCHITEKTUR-ÄNDERUNG: Nutze natives Gemini zur Verifikation ---
+            verification_prompt = f"""
+            Überprüfe die folgenden Behauptungen mithilfe von Google Search. Fasse die Ergebnisse für jede Behauptung zusammen.
+            BEHAUPTUNGEN:
+            {claims}
+            """
+            verification_response = model_verifier.generate_content(verification_prompt)
+            evidence = verification_response.text
+
+            full_prompt = f"SUBSTANZ (TEXT):\n{text[:2000]}\n\nBEWEISKETTE (ZUSAMMENFASSUNG DER SUCHERGEBNISSE):\n{evidence}"
         elif input_type == "image":
             image = Image.open(io.BytesIO(input_data.getvalue()))
             full_prompt = [image, "Führe eine forensische Analyse dieses Bildes durch."]
 
-        system_prompt = f"DU BIST 'DARK KNIGHT CHILD' IM FORENSIK-MODUS. OUTPUT FORMAT (NUR JSON): {{ \"fake_suspicion\": \"Gering|Mittel|Hoch|Kritisch\", \"verdict\": \"...\", \"evidence_chain\": [\"...\"] }}"
+        system_prompt = f"DU BIST 'DARK KNIGHT CHILD' IM FORENSIK-MODUS. Fasse ein Urteil basierend auf der Beweiskette. OUTPUT FORMAT (NUR JSON): {{ \"fake_suspicion\": \"Gering|Mittel|Hoch|Kritisch\", \"verdict\": \"...\", \"evidence_chain\": [\"...\"] }}"
         model_forensic_with_prompt = genai.GenerativeModel('gemini-pro', system_instruction=system_prompt)
         response = model_forensic_with_prompt.generate_content(full_prompt, generation_config=GenerationConfig(response_mime_type="application/json"))
         return json.loads(response.text)
