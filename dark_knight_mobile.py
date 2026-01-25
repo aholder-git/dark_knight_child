@@ -1,6 +1,7 @@
 import streamlit as st
-from google import genai
-from google.genai.types import Tool, GenerateContentConfig, GoogleSearch
+import google.generativeai as genai
+from google.generativeai.types import Tool, GenerationConfig, HarmCategory, HarmBlockThreshold
+from google.generativeai.types import GoogleSearch
 import os
 import json
 import requests
@@ -8,9 +9,10 @@ from bs4 import BeautifulSoup
 from serpapi import GoogleSearch as SerpApiSearch
 from PIL import Image
 import io
+from datetime import datetime
 
 # 1. KONFIGURATION
-st.set_page_config(page_title="Dark Child (Janus)", page_icon=" Janus", layout="centered")
+st.set_page_config(page_title="Dark Child (Janus)", page_icon="🦇", layout="centered")
 
 # --- SICHERHEITSSCHLEUSE ---
 def check_password():
@@ -26,40 +28,30 @@ def check_password():
 
 if not check_password(): st.stop()
 
-# 2. API-SETUP (ERWEITERT)
+# 2. API-SETUP
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     SERPAPI_API_KEY = st.secrets["SERPAPI_API_KEY"]
-except Exception:
-    API_KEY = os.environ.get("GEMINI_API_KEY")
-    SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY")
-
-if not API_KEY or not SERPAPI_API_KEY:
-    st.error("API KEY FEHLT (GEMINI oder SERPAPI). JANUS ist blind.")
+    genai.configure(api_key=API_KEY)
+except (KeyError, AttributeError) as e:
+    st.error(f"API KEY FEHLT in st.secrets oder Konfiguration fehlgeschlagen: {e}")
     st.stop()
 
-client = genai.Client(api_key=API_KEY)
-
-# 3. MOBILE CSS (ERWEITERT)
-st.markdown("""
-    <style>
-    .stApp { background-color: #000000; color: #E0E0E0; }
-    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
-    .mobile-title { font-family: 'Courier New', monospace; font-size: 1.5rem; text-align: center; color: #888; letter-spacing: 3px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
-    .stTextInput input, .stTextArea textarea { background-color: #111 !important; color: #FFF !important; border: 1px solid #333 !important; border-radius: 8px; }
-    .stButton>button { background: #007BFF !important; color: white !important; width: 100%; height: 3.5em; border-radius: 8px; font-weight: bold; font-size: 1.1rem; border: none; text-transform: uppercase; letter-spacing: 2px; }
-    .mobile-output { background-color: #0a0a0a; padding: 15px; border-radius: 8px; border-left: 3px solid #007BFF; font-family: sans-serif; line-height: 1.6; font-size: 0.95rem; margin-top: 20px; }
-    .verdict-safe { color: #00ff41; } .verdict-warn { color: #ffd700; } .verdict-danger { color: #ff3333; }
-    header, footer, #MainMenu { visibility: hidden; }
-    </style>
-""", unsafe_allow_html=True)
+# 3. MOBILE CSS
+st.markdown("""<style>.stApp { background-color: #000000; color: #E0E0E0; } .mobile-title { font-family: 'Courier New', monospace; font-size: 1.5rem; text-align: center; color: #888; } .mobile-output { background-color: #0a0a0a; padding: 15px; border-radius: 8px; border-left: 3px solid #007BFF; } .verdict-safe { color: #00ff41; } .verdict-warn { color: #ffd700; } .verdict-danger { color: #ff3333; } header, footer, #MainMenu { visibility: hidden; }</style>""", unsafe_allow_html=True)
 
 # --- FUNKTIONEN: SCAN-MODUS ---
 def run_tactical_scan(query_text, count_val, style_val, gain_val):
-    # ... (unverändert)
-    return "Scan-Funktion hier..."
+    try:
+        sys_prompt = f"DU BIST 'DARK KNIGHT CHILD'. EINE MOBILE TAKTISCHE KI-EINHEIT. NUTZE GOOGLE SEARCH FÜR AKTUELLE DATEN. Formatiere als Markdown-Liste. Liefere exakt {count_val} Punkte. MODUS: {style_val}."
+        # --- KORREKTUR: Umstellung auf 'gemini-flash-latest' ---
+        model = genai.GenerativeModel('gemini-flash-latest', system_instruction=sys_prompt, tools=[Tool(google_search=GoogleSearch())])
+        temp = 0.7 if style_val != "AMARONE" else 1.1
+        response = model.generate_content(query_text, generation_config=GenerationConfig(temperature=temp * (gain_val/100)))
+        return response.text
+    except Exception as e: return f"OFFLINE: {e}"
 
-# --- FUNKTIONEN: VERIFIKATIONS-MODUS (PROTOKOLL JANUS) ---
+# --- FUNKTIONEN: VERIFIKATIONS-MODUS ---
 def fetch_url_content(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}; response = requests.get(url, headers=headers, timeout=10)
@@ -75,15 +67,16 @@ def search_google(query):
     except Exception as e: return f"Google-Suche fehlgeschlagen: {e}"
 
 def run_forensic_verification(input_data, input_type):
-    system_prompt = f"""
-    DU BIST 'DARK KNIGHT CHILD' IM FORENSIK-MODUS. DEINE MISSION IST DIE GNADENLOSE ZERLEGUNG VON INFORMATIONEN.
-    OUTPUT FORMAT (NUR JSON): {{ "fake_suspicion": "Gering|Mittel|Hoch|Kritisch", "verdict": "...", "evidence_chain": ["..."] }}
-    """
+    system_prompt = f"DU BIST 'DARK KNIGHT CHILD' IM FORENSIK-MODUS. OUTPUT FORMAT (NUR JSON): {{ \"fake_suspicion\": \"Gering|Mittel|Hoch|Kritisch\", \"verdict\": \"...\", \"evidence_chain\": [\"...\"] }}"
+    # --- KORREKTUR: Umstellung auf 'gemini-pro' für JSON-Stabilität ---
+    model = genai.GenerativeModel('gemini-pro', system_instruction=system_prompt)
     full_prompt = ""
     try:
         if input_type in ["text", "url"]:
             text = fetch_url_content(input_data) if input_type == "url" else input_data
-            claims_response = client.models.generate_content(model="gemini-3-flash-preview", contents=f"Extrahiere die 3 wichtigsten, überprüfbaren Behauptungen aus diesem Text. TEXT: {text[:2000]}")
+            # --- KORREKTUR: Umstellung auf 'gemini-flash-latest' ---
+            claims_model = genai.GenerativeModel('gemini-flash-latest')
+            claims_response = claims_model.generate_content(f"Extrahiere die 3 wichtigsten, überprüfbaren Behauptungen aus diesem Text. TEXT: {text[:2000]}")
             claims = claims_response.text
             evidence = ""
             for claim in claims.split('\n'):
@@ -92,92 +85,56 @@ def run_forensic_verification(input_data, input_type):
         elif input_type == "image":
             image = Image.open(io.BytesIO(input_data.getvalue()))
             full_prompt = [image, "Führe eine forensische Analyse dieses Bildes durch."]
-        
-        response = client.models.generate_content(
-            model="gemini-3-pro-preview", contents=full_prompt,
-            config=GenerateContentConfig(response_mime_type="application/json", system_instruction=system_prompt)
-        )
+
+        response = model.generate_content(full_prompt, generation_config=GenerationConfig(response_mime_type="application/json"))
         return json.loads(response.text)
     except Exception as e:
-        return {"error": str(e)}
+        st.error(f"FORENSIK-FEHLER IM KERN: {e}")
+        return {"error": str(e), "fake_suspicion": "KRITISCH", "verdict": "Systemfehler während der Analyse.", "evidence_chain": [str(e)]}
 
 def display_forensic_dossier(dossier):
     suspicion = dossier.get('fake_suspicion', 'Unbekannt').lower()
     if suspicion == 'gering': v_class = "verdict-safe"
     elif suspicion == 'mittel': v_class = "verdict-warn"
     else: v_class = "verdict-danger"
-    
     evidence_html = "".join(f"<li>{item}</li>" for item in dossier.get('evidence_chain', []))
-    
-    st.markdown(f"""
-    <div class='mobile-output'>
-        <p><b>FAKE-VERDACHT:</b> <span class='{v_class}'>{dossier.get('fake_suspicion', 'N/A')}</span></p>
-        <p><b>URTEIL:</b> {dossier.get('verdict', 'N/A')}</p>
-        <hr>
-        <p><b>BEWEISKETTE:</b></p>
-        <ul>{evidence_html}</ul>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div class='mobile-output'><p><b>FAKE-VERDACHT:</b> <span class='{v_class}'>{dossier.get('fake_suspicion', 'N/A')}</span></p><p><b>URTEIL:</b> {dossier.get('verdict', 'N/A')}</p><hr><p><b>BEWEISKETTE:</b></p><ul>{evidence_html}</ul></div>""", unsafe_allow_html=True)
 
 # 4. INTERFACE
 st.markdown('<div class="mobile-title">DARK CHILD</div>', unsafe_allow_html=True)
 st.caption("Protokoll Janus: Taktische Aufklärung & Forensische Verifikation")
-
-# MODUS-WAHL
 mode = st.radio("Operationsmodus:", ["📡 Taktischer Scan", "🛡️ Forensische Verifikation"], horizontal=True)
-
 if "last_output" not in st.session_state: st.session_state.last_output = None
 
-# --- MODUS 1: TAKTISCHER SCAN ---
 if mode == "📡 Taktischer Scan":
     with st.expander("⚙️ TAKTIK & QUANTITÄT"):
-        msg_count = st.slider("Anzahl (Meldungen)", 1, 10, 3)
-        gain = st.slider("Tiefe", 0, 100, 90)
-        style = st.select_slider("Stil", options=["TROCKEN", "FORENSISCH", "AMARONE"], value="FORENSISCH")
-    
+        msg_count = st.slider("Anzahl", 1, 10, 3); gain = st.slider("Tiefe", 0, 100, 90); style = st.select_slider("Stil", options=["TROCKEN", "FORENSISCH", "AMARONE"], value="FORENSISCH")
     query = st.text_area("SIGNAL", height=80, placeholder="Leer lassen für Auto-Scan...")
-
-    if st.session_state.last_output is None:
-        with st.spinner("Initialisiere Radar..."):
-            start_query = "SCAN: BREAKING NEWS (GLOBAL & TECH) - WICHTIGSTE ENTWICKLUNGEN DER LETZTEN 24H"
-            st.session_state.last_output = {"type": "scan", "content": run_tactical_scan(start_query, msg_count, style, gain)}
-
     if st.button("SENDEN / REFRESH"):
         active_query = query if query else "SCAN: BREAKING NEWS (GLOBAL & TECH) - UPDATE"
-        with st.spinner("Uplink..."):
-            st.session_state.last_output = {"type": "scan", "content": run_tactical_scan(active_query, msg_count, style, gain)}
-
-# --- MODUS 2: FORENSIK ---
+        with st.spinner("Uplink..."): st.session_state.last_output = {"type": "scan", "content": run_tactical_scan(active_query, msg_count, style, gain)}
 else:
-    st.markdown("---")
     sub_mode_text, sub_mode_url, sub_mode_img = st.tabs(["TEXT", "URL", "BILD"])
-    
     with sub_mode_text:
-        text_input = st.text_area("Text zur Verifikation:", height=150)
+        text_input = st.text_area("Text:", height=150)
         if st.button("VERIFIZIEREN (TEXT)"):
             if text_input:
-                with st.spinner("Führe Kreuzverhör durch..."):
-                    st.session_state.last_output = {"type": "verification", "content": run_forensic_verification(text_input, "text")}
-    
+                with st.spinner("Kreuzverhör..."): st.session_state.last_output = {"type": "verification", "content": run_forensic_verification(text_input, "text")}
     with sub_mode_url:
-        url_input = st.text_input("URL zur Verifikation:")
+        url_input = st.text_input("URL:")
         if st.button("VERIFIZIEREN (URL)"):
             if url_input:
-                with st.spinner("Extrahiere Substanz & führe Kreuzverhör durch..."):
-                    st.session_state.last_output = {"type": "verification", "content": run_forensic_verification(url_input, "url")}
-
+                with st.spinner("Extraktion & Kreuzverhör..."): st.session_state.last_output = {"type": "verification", "content": run_forensic_verification(url_input, "url")}
     with sub_mode_img:
-        img_input = st.file_uploader("Bild zur Verifikation:", type=["jpg", "jpeg", "png"])
+        img_input = st.file_uploader("Bild:", type=["jpg", "jpeg", "png"])
         if st.button("VERIFIZIEREN (BILD)"):
             if img_input:
-                with st.spinner("Analysiere Pixel & Metadaten..."):
-                    st.session_state.last_output = {"type": "verification", "content": run_forensic_verification(img_input, "image")}
+                with st.spinner("Pixel-Analyse..."): st.session_state.last_output = {"type": "verification", "content": run_forensic_verification(img_input, "image")}
 
 # 6. ANZEIGE
 st.markdown("---")
 if st.session_state.last_output:
     if st.session_state.last_output["type"] == "scan":
-        formatted_output = st.session_state.last_output["content"].replace("* ", "\n\n* ")
-        st.markdown(f'<div class="mobile-output">{formatted_output}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="mobile-output">{st.session_state.last_output["content"]}</div>', unsafe_allow_html=True)
     elif st.session_state.last_output["type"] == "verification":
         display_forensic_dossier(st.session_state.last_output["content"])
