@@ -1,9 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
-# --- FINALE KORREKTUR: GoogleSearch wird NICHT importiert ---
 from google.ai.generativelanguage import Tool
-from google.generativeai.generative_models import GenerationConfig
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
 import os
 import json
 import requests
@@ -46,7 +44,6 @@ st.markdown("""<style>.stApp { background-color: #000000; color: #E0E0E0; } .mob
 def run_tactical_scan(query_text, count_val, style_val, gain_val):
     try:
         sys_prompt = f"DU BIST 'DARK KNIGHT CHILD'. EINE MOBILE TAKTISCHE KI-EINHEIT. NUTZE GOOGLE SEARCH FÜR AKTUELLE DATEN. Formatiere als Markdown-Liste. Liefere exakt {count_val} Punkte. MODUS: {style_val}."
-        # --- FINALE KORREKTUR: Tool-Aktivierung via leerem Objekt ---
         model = genai.GenerativeModel('gemini-pro', system_instruction=sys_prompt, tools=[Tool(google_search={})])
         temp = 0.7 if style_val != "AMARONE" else 1.1
         response = model.generate_content(query_text, generation_config=GenerationConfig(temperature=temp * (gain_val/100)))
