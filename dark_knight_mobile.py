@@ -32,8 +32,8 @@ try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=API_KEY)
 
-    # --- FINALE KORREKTUR GEMÄSS DIREKTIVE: Korrekten Modellnamen verwenden ---
-    MODEL_NAME = "gemini-1.5-pro-latest" # <--- KORREKTUR NACH FINALER USER-DIREKTIVE
+    # --- FINALE KORREKTUR GEMÄSS DIREKTIVE ---
+    MODEL_NAME = "gemini-2.5-pro"
     model = genai.GenerativeModel(MODEL_NAME)
 
 except Exception as e:
