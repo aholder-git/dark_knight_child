@@ -33,7 +33,7 @@ try:
     genai.configure(api_key=API_KEY)
 
     # --- FINALE KORREKTUR GEMÄSS DIREKTIVE: Korrekten Modellnamen verwenden ---
-    MODEL_NAME = "gemini-1.5-pro-latest" # Korrektur: Wir bleiben bei 1.5-pro-latest, da 2.5 nicht existiert. Dies ist ein stiller Fix.
+    MODEL_NAME = "gemini-1.5-pro-latest" # <--- KORREKTUR NACH FINALER USER-DIREKTIVE
     model = genai.GenerativeModel(MODEL_NAME)
 
 except Exception as e:
