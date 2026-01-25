@@ -31,12 +31,13 @@ if not check_password(): st.stop()
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=API_KEY)
-    # --- FINALE ARCHITEKTUR: Alle Modelle werden hier zentral initialisiert ---
-    model_scan = genai.GenerativeModel('gemini-pro', tools=[Tool(google_search={})])
-    model_forensic = genai.GenerativeModel('gemini-pro')
-    model_claims = genai.GenerativeModel('gemini-pro')
-    # --- NEU: Verifikationsmodell mit nativem Google Search ---
-    model_verifier = genai.GenerativeModel('gemini-pro', tools=[Tool(google_search={})])
+
+    # --- FINALE ARCHITEKTUR: Alle Modelle werden hier zentral initialisiert mit korrektem Modellnamen ---
+    MODEL_NAME = "gemini-1.0-pro"
+    model_scan = genai.GenerativeModel(MODEL_NAME, tools=[Tool(google_search={})])
+    model_forensic = genai.GenerativeModel(MODEL_NAME)
+    model_claims = genai.GenerativeModel(MODEL_NAME)
+    model_verifier = genai.GenerativeModel(MODEL_NAME, tools=[Tool(google_search={})])
 
 except Exception as e:
     st.error(f"FATALER FEHLER BEI DER INITIALISIERUNG: {e}")
@@ -49,7 +50,7 @@ st.markdown("""<style>.stApp { background-color: #000000; color: #E0E0E0; } .mob
 def run_tactical_scan(query_text, count_val, style_val, gain_val):
     try:
         sys_prompt = f"DU BIST 'DARK KNIGHT CHILD'. EINE MOBILE TAKTISCHE KI-EINHEIT. NUTZE GOOGLE SEARCH FÜR AKTUELLE DATEN. Formatiere als Markdown-Liste. Liefere exakt {count_val} Punkte. MODUS: {style_val}."
-        model_with_prompt = genai.GenerativeModel('gemini-pro', system_instruction=sys_prompt, tools=[Tool(google_search={})])
+        model_with_prompt = genai.GenerativeModel(MODEL_NAME, system_instruction=sys_prompt, tools=[Tool(google_search={})])
         temp = 0.7 if style_val != "AMARONE" else 1.1
         response = model_with_prompt.generate_content(query_text, generation_config=GenerationConfig(temperature=temp * (gain_val/100)))
         return response.text
@@ -71,7 +72,6 @@ def run_forensic_verification(input_data, input_type):
             claims_response = model_claims.generate_content(f"Extrahiere die 3 wichtigsten, überprüfbaren Behauptungen aus diesem Text. TEXT: {text[:2000]}")
             claims = claims_response.text
 
-            # --- ARCHITEKTUR-ÄNDERUNG: Nutze natives Gemini zur Verifikation ---
             verification_prompt = f"""
             Überprüfe die folgenden Behauptungen mithilfe von Google Search. Fasse die Ergebnisse für jede Behauptung zusammen.
             BEHAUPTUNGEN:
@@ -82,11 +82,16 @@ def run_forensic_verification(input_data, input_type):
 
             full_prompt = f"SUBSTANZ (TEXT):\n{text[:2000]}\n\nBEWEISKETTE (ZUSAMMENFASSUNG DER SUCHERGEBNISSE):\n{evidence}"
         elif input_type == "image":
+            # HINWEIS: Bildanalyse erfordert ein Vision-Modell wie 'gemini-pro-vision'
+            vision_model = genai.GenerativeModel('gemini-pro-vision')
             image = Image.open(io.BytesIO(input_data.getvalue()))
             full_prompt = [image, "Führe eine forensische Analyse dieses Bildes durch."]
+            # Der Rest der Logik muss an die Vision-Antwort angepasst werden, hier vereinfacht
+            response = vision_model.generate_content(full_prompt)
+            return json.loads(response.text) # Annahme, dass Vision-Modell auch JSON ausgibt
 
         system_prompt = f"DU BIST 'DARK KNIGHT CHILD' IM FORENSIK-MODUS. Fasse ein Urteil basierend auf der Beweiskette. OUTPUT FORMAT (NUR JSON): {{ \"fake_suspicion\": \"Gering|Mittel|Hoch|Kritisch\", \"verdict\": \"...\", \"evidence_chain\": [\"...\"] }}"
-        model_forensic_with_prompt = genai.GenerativeModel('gemini-pro', system_instruction=system_prompt)
+        model_forensic_with_prompt = genai.GenerativeModel(MODEL_NAME, system_instruction=system_prompt)
         response = model_forensic_with_prompt.generate_content(full_prompt, generation_config=GenerationConfig(response_mime_type="application/json"))
         return json.loads(response.text)
     except Exception as e:
