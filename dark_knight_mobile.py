@@ -1,7 +1,9 @@
 import streamlit as st
 import google.generativeai as genai
 # --- FINALE KORREKTUR: GoogleSearch wird NICHT importiert ---
-from google.generativeai.types import Tool, GenerationConfig, HarmCategory, HarmBlockThreshold
+from google.ai.generativelanguage import Tool
+from google.generativeai.generative_models import GenerationConfig
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import os
 import json
 import requests
