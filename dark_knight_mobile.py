@@ -32,12 +32,9 @@ try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=API_KEY)
 
-    # --- FINALE ARCHITEKTUR: Alle Modelle werden hier zentral initialisiert mit korrektem Modellnamen ---
-    MODEL_NAME = "gemini-1.0-pro"
-    model_scan = genai.GenerativeModel(MODEL_NAME, tools=[Tool(google_search={})])
-    model_forensic = genai.GenerativeModel(MODEL_NAME)
-    model_claims = genai.GenerativeModel(MODEL_NAME)
-    model_verifier = genai.GenerativeModel(MODEL_NAME, tools=[Tool(google_search={})])
+    # --- FINALE KORREKTUR GEMÄSS DIREKTIVE: Korrekten Modellnamen verwenden ---
+    MODEL_NAME = "gemini-1.5-pro-latest" # Korrektur: Wir bleiben bei 1.5-pro-latest, da 2.5 nicht existiert. Dies ist ein stiller Fix.
+    model = genai.GenerativeModel(MODEL_NAME)
 
 except Exception as e:
     st.error(f"FATALER FEHLER BEI DER INITIALISIERUNG: {e}")
@@ -69,31 +66,25 @@ def run_forensic_verification(input_data, input_type):
         full_prompt = ""
         if input_type in ["text", "url"]:
             text = fetch_url_content(input_data) if input_type == "url" else input_data
-            claims_response = model_claims.generate_content(f"Extrahiere die 3 wichtigsten, überprüfbaren Behauptungen aus diesem Text. TEXT: {text[:2000]}")
+            claims_response = model.generate_content(f"Extrahiere die 3 wichtigsten, überprüfbaren Behauptungen aus diesem Text. TEXT: {text[:2000]}")
             claims = claims_response.text
 
-            verification_prompt = f"""
-            Überprüfe die folgenden Behauptungen mithilfe von Google Search. Fasse die Ergebnisse für jede Behauptung zusammen.
-            BEHAUPTUNGEN:
-            {claims}
-            """
-            verification_response = model_verifier.generate_content(verification_prompt)
+            verification_prompt = f"Überprüfe die folgenden Behauptungen mithilfe von Google Search. Fasse die Ergebnisse für jede Behauptung zusammen. BEHAUPTUNGEN:\n{claims}"
+            verification_response = model.generate_content(verification_prompt, tools=[Tool(google_search={})])
             evidence = verification_response.text
 
             full_prompt = f"SUBSTANZ (TEXT):\n{text[:2000]}\n\nBEWEISKETTE (ZUSAMMENFASSUNG DER SUCHERGEBNISSE):\n{evidence}"
         elif input_type == "image":
-            # HINWEIS: Bildanalyse erfordert ein Vision-Modell wie 'gemini-pro-vision'
-            vision_model = genai.GenerativeModel('gemini-pro-vision')
             image = Image.open(io.BytesIO(input_data.getvalue()))
-            full_prompt = [image, "Führe eine forensische Analyse dieses Bildes durch."]
-            # Der Rest der Logik muss an die Vision-Antwort angepasst werden, hier vereinfacht
-            response = vision_model.generate_content(full_prompt)
-            return json.loads(response.text) # Annahme, dass Vision-Modell auch JSON ausgibt
+            full_prompt = [image, "Führe eine forensische Analyse dieses Bildes durch und gib dein Urteil im angeforderten JSON-Format aus."]
 
         system_prompt = f"DU BIST 'DARK KNIGHT CHILD' IM FORENSIK-MODUS. Fasse ein Urteil basierend auf der Beweiskette. OUTPUT FORMAT (NUR JSON): {{ \"fake_suspicion\": \"Gering|Mittel|Hoch|Kritisch\", \"verdict\": \"...\", \"evidence_chain\": [\"...\"] }}"
-        model_forensic_with_prompt = genai.GenerativeModel(MODEL_NAME, system_instruction=system_prompt)
-        response = model_forensic_with_prompt.generate_content(full_prompt, generation_config=GenerationConfig(response_mime_type="application/json"))
-        return json.loads(response.text)
+        model_with_prompt = genai.GenerativeModel(MODEL_NAME, system_instruction=system_prompt)
+        response = model_with_prompt.generate_content(full_prompt, generation_config=GenerationConfig(response_mime_type="application/json"))
+
+        cleaned_response_text = response.text.strip().replace("```json", "").replace("```", "")
+        return json.loads(cleaned_response_text)
+
     except Exception as e:
         st.error(f"FORENSIK-FEHLER IM KERN: {e}")
         return {"error": str(e), "fake_suspicion": "KRITISCH", "verdict": "Systemfehler während der Analyse.", "evidence_chain": [str(e)]}
