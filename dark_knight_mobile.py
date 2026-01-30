@@ -169,9 +169,15 @@ def run_cerberus(data, type_hint, model):
         return json.loads(res.text.strip().replace("```json", "").replace("```", ""))
     except Exception as e: return {"fake_suspicion": "ERROR", "verdict": str(e), "evidence": []}
 
-def run_wiretap(audio, model):
+def run_wiretap(audio, model, mode="transcript"):
     try:
-        # FIX: Explizite Konstruktion des Audio-Parts via Blob
+        # SYSTEM PROMPT SWITCH
+        if mode == "translate":
+            sys_prompt = "DU BIST EIN UNIVERSAL-ÜBERSETZER (BABEL FISH). Deine Aufgabe: 1. Höre das Audio und erkenne automatisch die Sprache(n). 2. Übersetze den gesamten Inhalt präzise und stilgerecht ins DEUTSCHE. Gib NUR die deutsche Übersetzung aus."
+        else:
+            sys_prompt = "DU BIST WIRETAP. Transkribiere das Audio präzise. Wenn es eine Frage ist, antworte kurz. Wenn es eine Beobachtung ist, fasse zusammen (Militärischer Stil)."
+
+        # Explizite Konstruktion des Audio-Parts via Blob
         audio_part = types.Part(
             inline_data=types.Blob(
                 mime_type="audio/wav",
@@ -181,8 +187,8 @@ def run_wiretap(audio, model):
 
         res = client.models.generate_content(
             model=model,
-            contents=[audio_part, "Transkribiere und fasse zusammen (Militärischer Stil)."],
-            config=GenerateContentConfig(system_instruction="WIRETAP AUDIO ANALYSIS")
+            contents=[audio_part, "Führe den Befehl aus."],
+            config=GenerateContentConfig(system_instruction=sys_prompt)
         )
         return res.text
     except Exception as e: return f"AUDIO ERROR: {e}"
@@ -202,7 +208,7 @@ st.markdown("""
     <div style="text-align:center; margin-bottom:20px;">
         <span style="font-family:'Courier New', monospace; font-size:2.2rem; font-weight:bold; color:#E0E0E0; text-shadow: 0 0 15px rgba(0, 123, 255, 0.6); letter-spacing: 2px;">DARK CHILD</span>
         <br>
-        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.3 (GEN3)</span>
+        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.4 (BABEL)</span>
     </div>
 """, unsafe_allow_html=True)
 
@@ -286,12 +292,29 @@ with tab_check:
 
 # --- TAB 3: WIRETAP ---
 with tab_audio:
-    st.info("🎙️ Sprich deine Beobachtung oder Frage.")
+    # MODE SWITCH
+    audio_mode = st.radio(
+        "MODUS",
+        ["📝 TRANSKRIPTION / ANALYSE", "🌐 BABEL FISH (AUTO-TRANSLATE)"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
+    st.info(f"🎙️ {audio_mode}")
     audio_val = st.audio_input("REC", label_visibility="collapsed")
+
     if audio_val:
-        with st.spinner("Analysiere Audio..."):
-            res = run_wiretap(audio_val.read(), selected_model)
+        with st.spinner("Verarbeite Audio-Stream..."):
+            # Map UI selection to internal mode
+            internal_mode = "translate" if "BABEL" in audio_mode else "transcript"
+            res = run_wiretap(audio_val.read(), selected_model, mode=internal_mode)
             st.markdown(f'<div class="mobile-output">{res}</div>', unsafe_allow_html=True)
+
+            # Optional: Vorlesen des Ergebnisses (besonders bei Übersetzung sinnvoll)
+            if internal_mode == "translate":
+                tts_bytes = generate_audio_briefing(res)
+                if tts_bytes:
+                    st.audio(tts_bytes, format="audio/mp3")
 
 # --- TAB 4: CHIMERA ---
 with tab_cam:
