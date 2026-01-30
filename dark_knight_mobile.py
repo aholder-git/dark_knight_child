@@ -134,7 +134,7 @@ def run_interrogator(context, question, model):
 
 def generate_audio_briefing(text):
     try:
-        # Clean markdown for TTS
+        # FIX: Limit entfernt für vollständige Wiedergabe (v4.7)
         clean_text = text.replace("*", "").replace("#", "").replace("-", "")
         tts = gTTS(text=clean_text, lang='de', slow=False)
         buf = io.BytesIO()
@@ -171,19 +171,19 @@ def run_cerberus(data, type_hint, model):
 
 def run_wiretap(audio, model, mode="transcript"):
     try:
-        # SYSTEM PROMPT SWITCH (ZERO HALLUCINATION)
+        # SYSTEM PROMPT SWITCH (v4.7 - BABEL UNCHAINED)
         if mode == "translate":
-            sys_prompt = """DU BIST EIN PRÄZISER ÜBERSETZER.
-            REGELN:
-            1. Übersetze NUR klar verständliche Sprache ins DEUTSCHE.
-            2. Wenn das Audio nur Rauschen, Stille oder unverständliche Geräusche enthält, gib exakt aus: "[KEINE SPRACHE ERKANNT]".
-            3. ERFINDE KEINE GESPRÄCHE. HALLUZINIERE NICHT.
-            4. Übersetze Wort-für-Wort, wenn Sprache vorhanden ist."""
+            # Wir nutzen wieder den "kreativen" Prompt, aber mit strikter Anweisung zur Vollständigkeit
+            sys_prompt = """DU BIST EIN SIMULTAN-DOLMETSCHER (BABEL FISH).
+            AUFGABE:
+            1. Höre den GESAMTEN Audio-Stream. Ignoriere Pausen.
+            2. Übersetze ALLES, was gesagt wird, ins DEUTSCHE.
+            3. Wenn das Audio lang ist, fahre fort bis zum Ende.
+            4. Gib NUR die deutsche Übersetzung aus."""
+            temp = 0.4 # Mittelweg: Nicht 0.0 (tot), nicht 1.0 (halluzinierend)
         else:
-            sys_prompt = """DU BIST WIRETAP.
-            Transkribiere präzise.
-            Wenn keine Sprache zu hören ist, schreibe: "[KEINE SPRACHE ERKANNT]".
-            Erfinde keinen Text."""
+            sys_prompt = "DU BIST WIRETAP. Transkribiere das Audio präzise. Wenn es eine Frage ist, antworte kurz. Wenn es eine Beobachtung ist, fasse zusammen (Militärischer Stil)."
+            temp = 0.3
 
         # Explizite Konstruktion des Audio-Parts via Blob
         audio_part = types.Part(
@@ -193,13 +193,12 @@ def run_wiretap(audio, model, mode="transcript"):
             )
         )
 
-        # FIX: Temperature auf 0.0 setzen um Halluzinationen zu töten
         res = client.models.generate_content(
             model=model,
-            contents=[audio_part, "Analysiere den Audio-Stream."],
+            contents=[audio_part, "Verarbeite den gesamten Stream."],
             config=GenerateContentConfig(
                 system_instruction=sys_prompt,
-                temperature=0.0  # ZERO CREATIVITY
+                temperature=temp
             )
         )
         return res.text
@@ -220,7 +219,7 @@ st.markdown("""
     <div style="text-align:center; margin-bottom:20px;">
         <span style="font-family:'Courier New', monospace; font-size:2.2rem; font-weight:bold; color:#E0E0E0; text-shadow: 0 0 15px rgba(0, 123, 255, 0.6); letter-spacing: 2px;">DARK CHILD</span>
         <br>
-        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.6 (ZERO-HAL)</span>
+        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.7 (UNCHAINED)</span>
     </div>
 """, unsafe_allow_html=True)
 
@@ -323,7 +322,7 @@ with tab_audio:
             st.markdown(f'<div class="mobile-output">{res}</div>', unsafe_allow_html=True)
 
             # Optional: Vorlesen des Ergebnisses (besonders bei Übersetzung sinnvoll)
-            if internal_mode == "translate" and "[KEINE SPRACHE ERKANNT]" not in res:
+            if internal_mode == "translate":
                 tts_bytes = generate_audio_briefing(res)
                 if tts_bytes:
                     st.audio(tts_bytes, format="audio/mp3")
