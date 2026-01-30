@@ -8,9 +8,16 @@ from bs4 import BeautifulSoup
 from PIL import Image
 from google import genai
 from google.genai.types import GenerateContentConfig, GoogleSearch, Part
+from gtts import gTTS
 
 # 1. KONFIGURATION & SETUP
 st.set_page_config(page_title="Dark Child", page_icon="🦇", layout="centered", initial_sidebar_state="collapsed")
+
+# --- GHOST PROTOCOL (PANIC SWITCH) ---
+def ghost_protocol():
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
 
 # --- SICHERHEITSSCHLEUSE (BIOMETRIC READY) ---
 def check_password():
@@ -20,7 +27,6 @@ def check_password():
         st.session_state.password_correct = False
 
     if not st.session_state.password_correct:
-        # Styling für den Login-Screen
         st.markdown("""
             <style>
             .login-header { text-align: center; margin-bottom: 20px; }
@@ -35,7 +41,6 @@ def check_password():
             </div>
         """, unsafe_allow_html=True)
 
-        # Formular erzwingt Browser-Passwort-Manager Interaktion
         with st.form("auth_form"):
             password = st.text_input("ACCESS CODE", type="password", placeholder="Enter Protocol Key...")
             submit = st.form_submit_button("AUTHENTICATE", use_container_width=True, type="primary")
@@ -74,15 +79,24 @@ st.markdown("""<style>
     .verdict-danger { color: #ff3333; font-weight: bold; }
     /* Expander Styling */
     div[data-testid="stExpander"] { background-color: #080808; border: 1px solid #333; border-radius: 5px; }
+    /* Chat Styling */
+    .stChatMessage { background-color: #111; border: 1px solid #333; }
     /* Hide Elements */
     header, footer, #MainMenu { visibility: hidden; }
     .stDeployButton { display:none; }
 </style>""", unsafe_allow_html=True)
 
-# 4. SIDEBAR CONFIG (NUR NOCH SYSTEM CORE)
+# 4. SIDEBAR CONFIG (SYSTEM CORE & GHOST)
 with st.sidebar:
     st.header("⚙️ SYSTEM CORE")
     selected_model = st.selectbox("MODEL", ["gemini-2.0-flash-exp", "gemini-2.5-pro", "gemini-3-pro-preview"], index=0)
+    st.divider()
+
+    # GHOST BUTTON
+    st.markdown("### ⚠️ DANGER ZONE")
+    if st.button("👻 GHOST PROTOCOL", type="primary", use_container_width=True, help="SOFORTIGER LOGOUT & CACHE CLEAR"):
+        ghost_protocol()
+
     st.divider()
     if st.button("LOGOUT", use_container_width=True):
         del st.session_state["password_correct"]
@@ -100,9 +114,29 @@ def run_tactical_scan(query, count, style, gain, model):
         return res.text
     except Exception as e: return f"OFFLINE: {e}"
 
+def run_interrogator(context, question, model):
+    try:
+        sys = "DU BIST DER INTERROGATOR. Analysiere den Kontext und beantworte die taktische Rückfrage präzise."
+        prompt = f"KONTEXT (VORHERIGER SCAN):\n{context}\n\nRÜCKFRAGE:\n{question}"
+        res = client.models.generate_content(
+            model=model, contents=prompt,
+            config=GenerateContentConfig(system_instruction=sys, tools=[GoogleSearch()])
+        )
+        return res.text
+    except Exception as e: return f"INTERROGATION FAILED: {e}"
+
+def generate_audio_briefing(text):
+    try:
+        # Clean markdown for TTS
+        clean_text = text.replace("*", "").replace("#", "").replace("-", "")[:1000] # Limit length
+        tts = gTTS(text=clean_text, lang='de', slow=False)
+        buf = io.BytesIO()
+        tts.write_to_fp(buf)
+        return buf.getvalue()
+    except Exception as e: return None
+
 def run_cerberus(data, type_hint, model):
     try:
-        # Auto-Detect URL vs Text
         content = data
         if type_hint == "auto":
             if data.strip().startswith(("http://", "https://")):
@@ -112,11 +146,10 @@ def run_cerberus(data, type_hint, model):
                     s = BeautifulSoup(r.content, 'html.parser')
                     [x.extract() for x in s(['script', 'style'])]
                     content = " ".join(s.get_text().split())[:3000]
-                except: content = data # Fallback
+                except: content = data
             else:
                 content = data
 
-        # Analysis
         sys = """DU BIST CERBERUS. Analysiere Fakten.
         OUTPUT JSON: { "fake_suspicion": "Gering|Mittel|Hoch", "verdict": "Kurzfazit", "evidence": ["Punkt 1", "Punkt 2"] }"""
 
@@ -149,21 +182,23 @@ def run_chimera(img, model):
     except Exception as e: return f"VISUAL ERROR: {e}"
 
 # 6. MAIN INTERFACE (TABS)
-# --- TITEL UPGRADE ---
 st.markdown("""
     <div style="text-align:center; margin-bottom:20px;">
         <span style="font-family:'Courier New', monospace; font-size:2.2rem; font-weight:bold; color:#E0E0E0; text-shadow: 0 0 15px rgba(0, 123, 255, 0.6); letter-spacing: 2px;">DARK CHILD</span>
         <br>
-        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v3.5</span>
+        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.0</span>
     </div>
 """, unsafe_allow_html=True)
 
 tab_scan, tab_check, tab_audio, tab_cam = st.tabs(["📡 SCAN", "🛡️ CHECK", "🎙️ AUDIO", "👁️ CAM"])
 
-# --- TAB 1: SCAN ---
+# --- TAB 1: SCAN & INTERROGATOR ---
 with tab_scan:
-    # PARAMETER WIEDER HIER (IM EXPANDER)
-    with st.expander("⚙️ TAKTISCHE PARAMETER (ANZAHL / TIEFE)", expanded=False):
+    # STATE MANAGEMENT FÜR SCAN
+    if "scan_result" not in st.session_state: st.session_state.scan_result = None
+    if "chat_history" not in st.session_state: st.session_state.chat_history = []
+
+    with st.expander("⚙️ TAKTISCHE PARAMETER", expanded=False):
         scan_count = st.slider("Anzahl Meldungen", 1, 10, 3)
         scan_gain = st.slider("Analysetiefe", 0, 100, 90)
         scan_style = st.select_slider("Stil", options=["TROCKEN", "FORENSISCH", "AMARONE"], value="FORENSISCH")
@@ -174,8 +209,38 @@ with tab_scan:
         q = query if query else "SCAN: BREAKING NEWS (GLOBAL & TECH) - UPDATE"
         with st.status("Scanning...", expanded=True) as status:
             res = run_tactical_scan(q, scan_count, scan_style, scan_gain, selected_model)
+            st.session_state.scan_result = res
+            st.session_state.chat_history = [] # Reset Chat on new scan
             status.update(label="Scan Complete", state="complete", expanded=False)
-            st.markdown(f'<div class="mobile-output">{res}</div>', unsafe_allow_html=True)
+
+    # RESULT DISPLAY
+    if st.session_state.scan_result:
+        st.markdown(f'<div class="mobile-output">{st.session_state.scan_result}</div>', unsafe_allow_html=True)
+
+        # 1. AUDIO BRIEFING
+        if st.button("🔊 BRIEFING ABSPIELEN", use_container_width=True):
+            audio_bytes = generate_audio_briefing(st.session_state.scan_result)
+            if audio_bytes:
+                st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+
+        st.divider()
+
+        # 2. INTERROGATOR (CHAT)
+        st.caption("💬 INTERROGATOR (Kontext-Fragen)")
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        if prompt := st.chat_input("Rückfrage zum Scan..."):
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Analysiere..."):
+                    answer = run_interrogator(st.session_state.scan_result, prompt, selected_model)
+                    st.markdown(answer)
+                    st.session_state.chat_history.append({"role": "assistant", "content": answer})
 
 # --- TAB 2: CERBERUS ---
 with tab_check:
@@ -193,7 +258,6 @@ with tab_check:
                     dossier = run_cerberus(check_input, "auto", selected_model)
                 status.update(label="Dossier erstellt", state="complete", expanded=False)
 
-                # Render Dossier
                 susp = dossier.get('fake_suspicion', 'N/A')
                 color = "verdict-safe" if "gering" in susp.lower() else "verdict-danger"
                 ev_html = "".join(f"<li>{x}</li>" for x in dossier.get('evidence', []))
