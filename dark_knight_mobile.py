@@ -55,20 +55,17 @@ st.markdown("""<style>
     .verdict-safe { color: #00ff41; font-weight: bold; }
     .verdict-warn { color: #ffd700; font-weight: bold; }
     .verdict-danger { color: #ff3333; font-weight: bold; }
+    /* Expander Styling */
+    div[data-testid="stExpander"] { background-color: #080808; border: 1px solid #333; border-radius: 5px; }
     /* Hide Elements */
     header, footer, #MainMenu { visibility: hidden; }
     .stDeployButton { display:none; }
 </style>""", unsafe_allow_html=True)
 
-# 4. SIDEBAR CONFIG (SETTINGS)
+# 4. SIDEBAR CONFIG (NUR NOCH SYSTEM CORE)
 with st.sidebar:
     st.header("⚙️ SYSTEM CORE")
     selected_model = st.selectbox("MODEL", ["gemini-2.0-flash-exp", "gemini-2.5-pro", "gemini-3-pro-preview"], index=0)
-    st.divider()
-    st.caption("SCAN PARAMETER")
-    scan_count = st.slider("Items", 1, 10, 3)
-    scan_gain = st.slider("Tiefe", 0, 100, 90)
-    scan_style = st.select_slider("Stil", options=["TROCKEN", "FORENSISCH", "AMARONE"], value="FORENSISCH")
     st.divider()
     if st.button("LOGOUT", use_container_width=True):
         del st.session_state["password_correct"]
@@ -77,7 +74,7 @@ with st.sidebar:
 # 5. LOGIK MODULE
 def run_tactical_scan(query, count, style, gain, model):
     try:
-        sys = f"DU BIST DARK CHILD. Mobile Intel Unit. Nutze Google Search. Format: Markdown Liste. {count} Punkte. Stil: {style}."
+        sys = f"DU BIST DARK CHILD. Mobile Intel Unit. Nutze Google Search. Format: Markdown Liste. Liefere exakt {count} Punkte. Stil: {style}."
         temp = 0.7 if style != "AMARONE" else 1.1
         res = client.models.generate_content(
             model=model, contents=query,
@@ -135,13 +132,27 @@ def run_chimera(img, model):
     except Exception as e: return f"VISUAL ERROR: {e}"
 
 # 6. MAIN INTERFACE (TABS)
-st.markdown('<div style="text-align:center; font-family:monospace; color:#666; margin-bottom:5px;">DARK CHILD v3.5</div>', unsafe_allow_html=True)
+# --- TITEL UPGRADE ---
+st.markdown("""
+    <div style="text-align:center; margin-bottom:20px;">
+        <span style="font-family:'Courier New', monospace; font-size:2.2rem; font-weight:bold; color:#E0E0E0; text-shadow: 0 0 15px rgba(0, 123, 255, 0.6); letter-spacing: 2px;">DARK CHILD</span>
+        <br>
+        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v3.5</span>
+    </div>
+""", unsafe_allow_html=True)
 
 tab_scan, tab_check, tab_audio, tab_cam = st.tabs(["📡 SCAN", "🛡️ CHECK", "🎙️ AUDIO", "👁️ CAM"])
 
 # --- TAB 1: SCAN ---
 with tab_scan:
+    # PARAMETER WIEDER HIER (IM EXPANDER)
+    with st.expander("⚙️ TAKTISCHE PARAMETER (ANZAHL / TIEFE)", expanded=False):
+        scan_count = st.slider("Anzahl Meldungen", 1, 10, 3)
+        scan_gain = st.slider("Analysetiefe", 0, 100, 90)
+        scan_style = st.select_slider("Stil", options=["TROCKEN", "FORENSISCH", "AMARONE"], value="FORENSISCH")
+
     query = st.text_area("ZIEL / THEMA", height=70, placeholder="Leer = Global News Update")
+
     if st.button("SCAN STARTEN", use_container_width=True, type="primary"):
         q = query if query else "SCAN: BREAKING NEWS (GLOBAL & TECH) - UPDATE"
         with st.status("Scanning...", expanded=True) as status:
