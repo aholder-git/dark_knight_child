@@ -3,4 +3,3 @@ google-genai
 requests
 beautifulsoup4
 Pillow
-
