@@ -1,10 +1,17 @@
-# Sektor 7 Gatekeeper Protokoll
+# SEKTOR 7 GATEKEEPER PROTOKOLL (V3.5 HARDENED)
 
-# 1. Sensible Konfigurationen und Geheimnisse
-# VERHINDERT, DASS API-SCHLÜSSEL JEMALS GE-PUSHT WERDEN
-.streamlit/secrets.toml
+# 1. SENSIBLE DATEN (AGGRESSIV)
+# Ignoriert den kompletten Ordner, egal was drin ist (.txt, .toml, etc.)
+.streamlit/
 
-# 2. Python / Conda Umgebungsmüll
+# Ignoriert alle TOML-Dateien überall
+*.toml
+
+# Ignoriert Textdateien, die oft versehentlich erstellt werden
+secrets.txt
+key.txt
+
+# 2. PYTHON / CONDA MÜLL
 __pycache__/
 *.pyc
 .env
@@ -12,6 +19,6 @@ venv/
 env/
 *.egg-info/
 
-# 3. Betriebssystem-spezifischer Müll
+# 3. SYSTEM MÜLL
 .DS_Store
 Thumbs.db
