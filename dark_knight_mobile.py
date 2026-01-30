@@ -89,7 +89,13 @@ st.markdown("""<style>
 # 4. SIDEBAR CONFIG (SYSTEM CORE & GHOST)
 with st.sidebar:
     st.header("⚙️ SYSTEM CORE")
-    selected_model = st.selectbox("MODEL", ["gemini-2.0-flash-exp", "gemini-2.5-pro", "gemini-3-pro-preview"], index=0)
+    # UPGRADE: GEN 3 MODELLE (JAN 2026)
+    selected_model = st.selectbox(
+        "NEURAL CORE",
+        ["gemini-3-flash-preview", "gemini-3-pro-preview", "gemini-2.5-pro"],
+        index=0,
+        help="Flash: Speed/Radar | Pro: Reasoning/Coding"
+    )
     st.divider()
 
     # GHOST BUTTON
@@ -186,7 +192,7 @@ st.markdown("""
     <div style="text-align:center; margin-bottom:20px;">
         <span style="font-family:'Courier New', monospace; font-size:2.2rem; font-weight:bold; color:#E0E0E0; text-shadow: 0 0 15px rgba(0, 123, 255, 0.6); letter-spacing: 2px;">DARK CHILD</span>
         <br>
-        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.0</span>
+        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.1 (GEN3)</span>
     </div>
 """, unsafe_allow_html=True)
 
