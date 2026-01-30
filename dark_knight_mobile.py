@@ -7,7 +7,8 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from PIL import Image
 from google import genai
-from google.genai.types import GenerateContentConfig, GoogleSearch, Part
+from google.genai import types # WICHTIG FÜR DEN AUDIO FIX
+from google.genai.types import GenerateContentConfig, GoogleSearch
 from gtts import gTTS
 
 # 1. KONFIGURATION & SETUP
@@ -89,12 +90,12 @@ st.markdown("""<style>
 # 4. SIDEBAR CONFIG (SYSTEM CORE & GHOST)
 with st.sidebar:
     st.header("⚙️ SYSTEM CORE")
-    # UPGRADE: GEN 3 MODELLE (JAN 2026)
+    # LISTE AKTUALISIERT: Flash 1.5 als Safe Default
     selected_model = st.selectbox(
         "NEURAL CORE",
-        ["gemini-3-flash-preview", "gemini-3-pro-preview", "gemini-2.5-pro"],
+        ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-pro"],
         index=0,
-        help="Flash: Speed/Radar | Pro: Reasoning/Coding"
+        help="Flash: Speed/Radar | Pro: Reasoning"
     )
     st.divider()
 
@@ -170,8 +171,17 @@ def run_cerberus(data, type_hint, model):
 
 def run_wiretap(audio, model):
     try:
+        # FIX: Explizite Konstruktion des Audio-Parts via Blob
+        audio_part = types.Part(
+            inline_data=types.Blob(
+                mime_type="audio/wav",
+                data=audio
+            )
+        )
+
         res = client.models.generate_content(
-            model=model, contents=[Part.from_bytes(audio, mime_type="audio/wav"), "Transkribiere und fasse zusammen (Militärischer Stil)."],
+            model=model,
+            contents=[audio_part, "Transkribiere und fasse zusammen (Militärischer Stil)."],
             config=GenerateContentConfig(system_instruction="WIRETAP AUDIO ANALYSIS")
         )
         return res.text
@@ -192,7 +202,7 @@ st.markdown("""
     <div style="text-align:center; margin-bottom:20px;">
         <span style="font-family:'Courier New', monospace; font-size:2.2rem; font-weight:bold; color:#E0E0E0; text-shadow: 0 0 15px rgba(0, 123, 255, 0.6); letter-spacing: 2px;">DARK CHILD</span>
         <br>
-        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.1 (GEN3)</span>
+        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.2</span>
     </div>
 """, unsafe_allow_html=True)
 
