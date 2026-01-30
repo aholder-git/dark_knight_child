@@ -7,8 +7,8 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from PIL import Image
 from google import genai
-from google.genai import types # WICHTIG FÜR DEN AUDIO FIX
-from google.genai.types import GenerateContentConfig, GoogleSearch
+from google.genai import types
+from google.genai.types import GenerateContentConfig, GoogleSearch, Part
 from gtts import gTTS
 
 # 1. KONFIGURATION & SETUP
@@ -90,12 +90,12 @@ st.markdown("""<style>
 # 4. SIDEBAR CONFIG (SYSTEM CORE & GHOST)
 with st.sidebar:
     st.header("⚙️ SYSTEM CORE")
-    # LISTE AKTUALISIERT: Flash 1.5 als Safe Default
+    # STRICT JAN 2026 COMPLIANCE
     selected_model = st.selectbox(
         "NEURAL CORE",
-        ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-pro"],
+        ["gemini-3-flash-preview", "gemini-3-pro-preview", "gemini-2.5-pro"],
         index=0,
-        help="Flash: Speed/Radar | Pro: Reasoning"
+        help="Gen 3 Architecture Only"
     )
     st.divider()
 
@@ -202,7 +202,7 @@ st.markdown("""
     <div style="text-align:center; margin-bottom:20px;">
         <span style="font-family:'Courier New', monospace; font-size:2.2rem; font-weight:bold; color:#E0E0E0; text-shadow: 0 0 15px rgba(0, 123, 255, 0.6); letter-spacing: 2px;">DARK CHILD</span>
         <br>
-        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.2</span>
+        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.3 (GEN3)</span>
     </div>
 """, unsafe_allow_html=True)
 
