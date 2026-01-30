@@ -134,8 +134,8 @@ def run_interrogator(context, question, model):
 
 def generate_audio_briefing(text):
     try:
-        # Clean markdown for TTS
-        clean_text = text.replace("*", "").replace("#", "").replace("-", "")[:1000] # Limit length
+        # FIX: Limit entfernt für vollständige Wiedergabe
+        clean_text = text.replace("*", "").replace("#", "").replace("-", "")
         tts = gTTS(text=clean_text, lang='de', slow=False)
         buf = io.BytesIO()
         tts.write_to_fp(buf)
@@ -171,9 +171,13 @@ def run_cerberus(data, type_hint, model):
 
 def run_wiretap(audio, model, mode="transcript"):
     try:
-        # SYSTEM PROMPT SWITCH
+        # SYSTEM PROMPT SWITCH (HARDENED)
         if mode == "translate":
-            sys_prompt = "DU BIST EIN UNIVERSAL-ÜBERSETZER (BABEL FISH). Deine Aufgabe: 1. Höre das Audio und erkenne automatisch die Sprache(n). 2. Übersetze den gesamten Inhalt präzise und stilgerecht ins DEUTSCHE. Gib NUR die deutsche Übersetzung aus."
+            sys_prompt = """DU BIST EIN SIMULTAN-DOLMETSCHER (BABEL FISH).
+            1. Höre den GANZEN Audio-Stream bis zur letzten Sekunde. Ignoriere Pausen oder Stille.
+            2. Übersetze JEDES gesprochene Wort Wort-für-Wort (Verbatim) ins DEUTSCHE.
+            3. Fasse NICHT zusammen. Schneide NICHTS ab.
+            4. Gib NUR die deutsche Übersetzung aus."""
         else:
             sys_prompt = "DU BIST WIRETAP. Transkribiere das Audio präzise. Wenn es eine Frage ist, antworte kurz. Wenn es eine Beobachtung ist, fasse zusammen (Militärischer Stil)."
 
@@ -187,7 +191,7 @@ def run_wiretap(audio, model, mode="transcript"):
 
         res = client.models.generate_content(
             model=model,
-            contents=[audio_part, "Führe den Befehl aus."],
+            contents=[audio_part, "Führe den Befehl vollständig aus."],
             config=GenerateContentConfig(system_instruction=sys_prompt)
         )
         return res.text
@@ -208,7 +212,7 @@ st.markdown("""
     <div style="text-align:center; margin-bottom:20px;">
         <span style="font-family:'Courier New', monospace; font-size:2.2rem; font-weight:bold; color:#E0E0E0; text-shadow: 0 0 15px rgba(0, 123, 255, 0.6); letter-spacing: 2px;">DARK CHILD</span>
         <br>
-        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.4 (BABEL)</span>
+        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.5 (DEEP STREAM)</span>
     </div>
 """, unsafe_allow_html=True)
 
