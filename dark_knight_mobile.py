@@ -134,7 +134,6 @@ def run_interrogator(context, question, model):
 
 def generate_audio_briefing(text):
     try:
-        # FIX: Limit entfernt für vollständige Wiedergabe (v4.7)
         clean_text = text.replace("*", "").replace("#", "").replace("-", "")
         tts = gTTS(text=clean_text, lang='de', slow=False)
         buf = io.BytesIO()
@@ -169,18 +168,22 @@ def run_cerberus(data, type_hint, model):
         return json.loads(res.text.strip().replace("```json", "").replace("```", ""))
     except Exception as e: return {"fake_suspicion": "ERROR", "verdict": str(e), "evidence": []}
 
-def run_wiretap(audio, model, mode="transcript"):
+def run_wiretap(audio, model, mode="transcript", previous_context=None):
     try:
-        # SYSTEM PROMPT SWITCH (v4.7 - BABEL UNCHAINED)
+        # SYSTEM PROMPT SWITCH (v4.9 - CHAIN LINK)
         if mode == "translate":
-            # Wir nutzen wieder den "kreativen" Prompt, aber mit strikter Anweisung zur Vollständigkeit
-            sys_prompt = """DU BIST EIN SIMULTAN-DOLMETSCHER (BABEL FISH).
-            AUFGABE:
-            1. Höre den GESAMTEN Audio-Stream. Ignoriere Pausen.
-            2. Übersetze ALLES, was gesagt wird, ins DEUTSCHE.
-            3. Wenn das Audio lang ist, fahre fort bis zum Ende.
-            4. Gib NUR die deutsche Übersetzung aus."""
-            temp = 0.4 # Mittelweg: Nicht 0.0 (tot), nicht 1.0 (halluzinierend)
+            if previous_context:
+                # CHAIN MODE: Wir geben den bisherigen Text mit
+                sys_prompt = f"""DU BIST EIN UNIVERSAL-ÜBERSETZER (BABEL FISH).
+                SITUATION: Du hast den Anfang dieses Audios bereits übersetzt.
+                BEREITS ÜBERSETZT: "{previous_context[-500:]}" (Die letzten Sätze).
+                AUFGABE: Höre das Audio. Finde die Stelle, wo der obige Text endet. ÜBERSETZE AB DORT WEITER ins DEUTSCHE.
+                WICHTIG: Wiederhole NICHT den alten Text. Gib NUR den NEUEN Teil aus."""
+            else:
+                # FIRST RUN: Normaler Start
+                sys_prompt = "DU BIST EIN UNIVERSAL-ÜBERSETZER (BABEL FISH). Deine Aufgabe: 1. Höre das Audio und erkenne automatisch die Sprache(n). 2. Übersetze den gesamten Inhalt präzise und stilgerecht ins DEUTSCHE. Gib NUR die deutsche Übersetzung aus."
+
+            temp = 0.2
         else:
             sys_prompt = "DU BIST WIRETAP. Transkribiere das Audio präzise. Wenn es eine Frage ist, antworte kurz. Wenn es eine Beobachtung ist, fasse zusammen (Militärischer Stil)."
             temp = 0.3
@@ -195,7 +198,7 @@ def run_wiretap(audio, model, mode="transcript"):
 
         res = client.models.generate_content(
             model=model,
-            contents=[audio_part, "Verarbeite den gesamten Stream."],
+            contents=[audio_part, "Führe den Befehl aus."],
             config=GenerateContentConfig(
                 system_instruction=sys_prompt,
                 temperature=temp
@@ -219,7 +222,7 @@ st.markdown("""
     <div style="text-align:center; margin-bottom:20px;">
         <span style="font-family:'Courier New', monospace; font-size:2.2rem; font-weight:bold; color:#E0E0E0; text-shadow: 0 0 15px rgba(0, 123, 255, 0.6); letter-spacing: 2px;">DARK CHILD</span>
         <br>
-        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.7 (UNCHAINED)</span>
+        <span style="font-family:monospace; font-size:0.9rem; color:#007BFF; letter-spacing: 1px;">MOBILE OPS v4.9 (CHAIN)</span>
     </div>
 """, unsafe_allow_html=True)
 
@@ -303,6 +306,10 @@ with tab_check:
 
 # --- TAB 3: WIRETAP ---
 with tab_audio:
+    # STATE FÜR AUDIO CHAIN
+    if "audio_transcript" not in st.session_state: st.session_state.audio_transcript = ""
+    if "audio_bytes_cache" not in st.session_state: st.session_state.audio_bytes_cache = None
+
     # MODE SWITCH
     audio_mode = st.radio(
         "MODUS",
@@ -314,18 +321,46 @@ with tab_audio:
     st.info(f"🎙️ {audio_mode}")
     audio_val = st.audio_input("REC", label_visibility="collapsed")
 
+    # NEUE AUFNAHME
     if audio_val:
-        with st.spinner("Verarbeite Audio-Stream..."):
-            # Map UI selection to internal mode
-            internal_mode = "translate" if "BABEL" in audio_mode else "transcript"
-            res = run_wiretap(audio_val.read(), selected_model, mode=internal_mode)
-            st.markdown(f'<div class="mobile-output">{res}</div>', unsafe_allow_html=True)
+        # Check ob es eine neue Datei ist (einfacher Check via Bytes)
+        current_bytes = audio_val.read()
+        if st.session_state.audio_bytes_cache != current_bytes:
+            st.session_state.audio_bytes_cache = current_bytes
+            st.session_state.audio_transcript = "" # Reset bei neuer Aufnahme
 
-            # Optional: Vorlesen des Ergebnisses (besonders bei Übersetzung sinnvoll)
-            if internal_mode == "translate":
-                tts_bytes = generate_audio_briefing(res)
-                if tts_bytes:
-                    st.audio(tts_bytes, format="audio/mp3")
+            with st.spinner("Verarbeite Audio-Stream (Start)..."):
+                internal_mode = "translate" if "BABEL" in audio_mode else "transcript"
+                res = run_wiretap(current_bytes, selected_model, mode=internal_mode)
+                st.session_state.audio_transcript = res
+
+    # ANZEIGE & CHAINING
+    if st.session_state.audio_transcript:
+        st.markdown(f'<div class="mobile-output">{st.session_state.audio_transcript}</div>', unsafe_allow_html=True)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            # TTS Button
+            if "BABEL" in audio_mode:
+                if st.button("🔊 VORLESEN", use_container_width=True):
+                    tts_bytes = generate_audio_briefing(st.session_state.audio_transcript)
+                    if tts_bytes:
+                        st.audio(tts_bytes, format="audio/mp3")
+
+        with col2:
+            # CONTINUE Button (Nur im Babel Modus sinnvoll)
+            if "BABEL" in audio_mode:
+                if st.button("🔄 WEITER (Nächster Teil)", use_container_width=True):
+                    with st.spinner("Höre weiter..."):
+                        new_part = run_wiretap(
+                            st.session_state.audio_bytes_cache,
+                            selected_model,
+                            mode="translate",
+                            previous_context=st.session_state.audio_transcript
+                        )
+                        # Append new part
+                        st.session_state.audio_transcript += f"\n\n[...]\n\n{new_part}"
+                        st.rerun()
 
 # --- TAB 4: CHIMERA ---
 with tab_cam:
