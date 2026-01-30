@@ -12,23 +12,40 @@ from google.genai.types import GenerateContentConfig, GoogleSearch, Part
 # 1. KONFIGURATION & SETUP
 st.set_page_config(page_title="Dark Child", page_icon="🦇", layout="centered", initial_sidebar_state="collapsed")
 
-# --- SICHERHEITSSCHLEUSE ---
+# --- SICHERHEITSSCHLEUSE (BIOMETRIC READY) ---
 def check_password():
     if "APP_PASSWORD" not in st.secrets: return True
-    def password_entered():
-        if st.session_state["password"] == st.secrets["APP_PASSWORD"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
+
     if "password_correct" not in st.session_state:
-        st.markdown("### 🔒 ZUGANG")
-        st.text_input("CODE", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.markdown("### 🔒 ZUGANG")
-        st.text_input("CODE", type="password", on_change=password_entered, key="password")
-        st.error("DENIED.")
+        st.session_state.password_correct = False
+
+    if not st.session_state.password_correct:
+        # Styling für den Login-Screen
+        st.markdown("""
+            <style>
+            .login-header { text-align: center; margin-bottom: 20px; }
+            .login-icon { font-size: 3rem; }
+            .login-title { font-family: 'Courier New', monospace; font-weight: bold; color: #007BFF; font-size: 1.5rem; }
+            .login-sub { color: #666; font-size: 0.8rem; letter-spacing: 2px; }
+            </style>
+            <div class='login-header'>
+                <div class='login-icon'>🛡️</div>
+                <div class='login-title'>SEKTOR 7</div>
+                <div class='login-sub'>IDENTITY VERIFICATION</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Formular erzwingt Browser-Passwort-Manager Interaktion
+        with st.form("auth_form"):
+            password = st.text_input("ACCESS CODE", type="password", placeholder="Enter Protocol Key...")
+            submit = st.form_submit_button("AUTHENTICATE", use_container_width=True, type="primary")
+
+            if submit:
+                if password == st.secrets["APP_PASSWORD"]:
+                    st.session_state.password_correct = True
+                    st.rerun()
+                else:
+                    st.error("ACCESS DENIED. INCIDENT LOGGED.")
         return False
     else:
         return True
