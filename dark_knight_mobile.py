@@ -1,137 +1,195 @@
 import streamlit as st
-import google.generativeai as genai
-from google.ai.generativelanguage import Tool
-from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
 import os
 import json
 import requests
-from bs4 import BeautifulSoup
-from PIL import Image
 import io
 from datetime import datetime
+from bs4 import BeautifulSoup
+from PIL import Image
+from google import genai
+from google.genai.types import GenerateContentConfig, GoogleSearch, Part
 
-# 1. KONFIGURATION
-st.set_page_config(page_title="Dark Child (Janus)", page_icon="🦇", layout="centered")
+# 1. KONFIGURATION & SETUP
+st.set_page_config(page_title="Dark Child", page_icon="🦇", layout="centered", initial_sidebar_state="collapsed")
 
 # --- SICHERHEITSSCHLEUSE ---
 def check_password():
     if "APP_PASSWORD" not in st.secrets: return True
     def password_entered():
-        if st.session_state["password"] == st.secrets["APP_PASSWORD"]: st.session_state["password_correct"] = True; del st.session_state["password"]
-        else: st.session_state["password_correct"] = False
+        if st.session_state["password"] == st.secrets["APP_PASSWORD"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
     if "password_correct" not in st.session_state:
-        st.markdown("### 🔒 ZUGANGSKONTROLLE"); st.text_input("CODE", type="password", on_change=password_entered, key="password"); return False
+        st.markdown("### 🔒 ZUGANG")
+        st.text_input("CODE", type="password", on_change=password_entered, key="password")
+        return False
     elif not st.session_state["password_correct"]:
-        st.markdown("### 🔒 ZUGANGSKONTROLLE"); st.text_input("CODE", type="password", on_change=password_entered, key="password"); st.error("ZUGRIFF VERWEIGERT."); return False
-    else: return True
+        st.markdown("### 🔒 ZUGANG")
+        st.text_input("CODE", type="password", on_change=password_entered, key="password")
+        st.error("DENIED.")
+        return False
+    else:
+        return True
 
 if not check_password(): st.stop()
 
-# 2. API-SETUP & MODELL-INITIALISIERUNG
+# 2. API CLIENT (V1.0)
 try:
-    API_KEY = st.secrets["GEMINI_API_KEY"]
-    genai.configure(api_key=API_KEY)
-
-    # --- FINALE KORREKTUR GEMÄSS DIREKTIVE ---
-    MODEL_NAME = "gemini-2.5-pro"
-    model = genai.GenerativeModel(MODEL_NAME)
-
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception as e:
-    st.error(f"FATALER FEHLER BEI DER INITIALISIERUNG: {e}")
+    st.error(f"INIT ERROR: {e}")
     st.stop()
 
-# 3. MOBILE CSS
-st.markdown("""<style>.stApp { background-color: #000000; color: #E0E0E0; } .mobile-title { font-family: 'Courier New', monospace; font-size: 1.5rem; text-align: center; color: #888; } .mobile-output { background-color: #0a0a0a; padding: 15px; border-radius: 8px; border-left: 3px solid #007BFF; } .verdict-safe { color: #00ff41; } .verdict-warn { color: #ffd700; } .verdict-danger { color: #ff3333; } header, footer, #MainMenu { visibility: hidden; }</style>""", unsafe_allow_html=True)
+# 3. MOBILE CSS (OPTIMIERT)
+st.markdown("""<style>
+    .stApp { background-color: #000000; color: #E0E0E0; }
+    /* Tabs Styling */
+    .stTabs [data-baseweb="tab-list"] { gap: 2px; background-color: #0a0a0a; border-radius: 10px; padding: 5px; }
+    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: #111; border-radius: 5px; color: #888; flex-grow: 1; justify-content: center; }
+    .stTabs [aria-selected="true"] { background-color: #007BFF !important; color: white !important; }
+    /* Output Styling */
+    .mobile-output { background-color: #0a0a0a; padding: 15px; border-radius: 8px; border-left: 4px solid #007BFF; margin-top: 15px; font-size: 0.95rem; }
+    /* Verdict Colors */
+    .verdict-safe { color: #00ff41; font-weight: bold; }
+    .verdict-warn { color: #ffd700; font-weight: bold; }
+    .verdict-danger { color: #ff3333; font-weight: bold; }
+    /* Hide Elements */
+    header, footer, #MainMenu { visibility: hidden; }
+    .stDeployButton { display:none; }
+</style>""", unsafe_allow_html=True)
 
-# --- FUNKTIONEN: SCAN-MODUS ---
-def run_tactical_scan(query_text, count_val, style_val, gain_val):
+# 4. SIDEBAR CONFIG (SETTINGS)
+with st.sidebar:
+    st.header("⚙️ SYSTEM CORE")
+    selected_model = st.selectbox("MODEL", ["gemini-2.0-flash-exp", "gemini-2.5-pro", "gemini-3-pro-preview"], index=0)
+    st.divider()
+    st.caption("SCAN PARAMETER")
+    scan_count = st.slider("Items", 1, 10, 3)
+    scan_gain = st.slider("Tiefe", 0, 100, 90)
+    scan_style = st.select_slider("Stil", options=["TROCKEN", "FORENSISCH", "AMARONE"], value="FORENSISCH")
+    st.divider()
+    if st.button("LOGOUT", use_container_width=True):
+        del st.session_state["password_correct"]
+        st.rerun()
+
+# 5. LOGIK MODULE
+def run_tactical_scan(query, count, style, gain, model):
     try:
-        sys_prompt = f"DU BIST 'DARK KNIGHT CHILD'. EINE MOBILE TAKTISCHE KI-EINHEIT. NUTZE GOOGLE SEARCH FÜR AKTUELLE DATEN. Formatiere als Markdown-Liste. Liefere exakt {count_val} Punkte. MODUS: {style_val}."
-        model_with_prompt = genai.GenerativeModel(MODEL_NAME, system_instruction=sys_prompt, tools=[Tool(google_search={})])
-        temp = 0.7 if style_val != "AMARONE" else 1.1
-        response = model_with_prompt.generate_content(query_text, generation_config=GenerationConfig(temperature=temp * (gain_val/100)))
-        return response.text
+        sys = f"DU BIST DARK CHILD. Mobile Intel Unit. Nutze Google Search. Format: Markdown Liste. {count} Punkte. Stil: {style}."
+        temp = 0.7 if style != "AMARONE" else 1.1
+        res = client.models.generate_content(
+            model=model, contents=query,
+            config=GenerateContentConfig(temperature=temp*(gain/100), system_instruction=sys, tools=[GoogleSearch()])
+        )
+        return res.text
     except Exception as e: return f"OFFLINE: {e}"
 
-# --- FUNKTIONEN: VERIFIKATIONS-MODUS ---
-def fetch_url_content(url):
+def run_cerberus(data, type_hint, model):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}; response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.content, 'html.parser'); [s.extract() for s in soup(['script', 'style'])]
-        return " ".join(t.strip() for t in soup.get_text().split())
-    except Exception as e: return f"Fehler beim Abrufen der URL: {e}"
+        # Auto-Detect URL vs Text
+        content = data
+        if type_hint == "auto":
+            if data.strip().startswith(("http://", "https://")):
+                try:
+                    h = {'User-Agent': 'Mozilla/5.0'}
+                    r = requests.get(data, headers=h, timeout=5)
+                    s = BeautifulSoup(r.content, 'html.parser')
+                    [x.extract() for x in s(['script', 'style'])]
+                    content = " ".join(s.get_text().split())[:3000]
+                except: content = data # Fallback
+            else:
+                content = data
 
-def run_forensic_verification(input_data, input_type):
+        # Analysis
+        sys = """DU BIST CERBERUS. Analysiere Fakten.
+        OUTPUT JSON: { "fake_suspicion": "Gering|Mittel|Hoch", "verdict": "Kurzfazit", "evidence": ["Punkt 1", "Punkt 2"] }"""
+
+        prompt = f"Prüfe Fakten via Google Search:\n{content[:2000]}" if type_hint != "image" else [data, "Forensische Analyse."]
+
+        res = client.models.generate_content(
+            model=model, contents=prompt,
+            config=GenerateContentConfig(response_mime_type="application/json", system_instruction=sys, tools=[GoogleSearch()] if type_hint != "image" else None)
+        )
+        return json.loads(res.text.strip().replace("```json", "").replace("```", ""))
+    except Exception as e: return {"fake_suspicion": "ERROR", "verdict": str(e), "evidence": []}
+
+def run_wiretap(audio, model):
     try:
-        full_prompt = ""
-        if input_type in ["text", "url"]:
-            text = fetch_url_content(input_data) if input_type == "url" else input_data
-            claims_response = model.generate_content(f"Extrahiere die 3 wichtigsten, überprüfbaren Behauptungen aus diesem Text. TEXT: {text[:2000]}")
-            claims = claims_response.text
+        res = client.models.generate_content(
+            model=model, contents=[Part.from_bytes(audio, mime_type="audio/wav"), "Transkribiere und fasse zusammen (Militärischer Stil)."],
+            config=GenerateContentConfig(system_instruction="WIRETAP AUDIO ANALYSIS")
+        )
+        return res.text
+    except Exception as e: return f"AUDIO ERROR: {e}"
 
-            verification_prompt = f"Überprüfe die folgenden Behauptungen mithilfe von Google Search. Fasse die Ergebnisse für jede Behauptung zusammen. BEHAUPTUNGEN:\n{claims}"
-            verification_response = model.generate_content(verification_prompt, tools=[Tool(google_search={})])
-            evidence = verification_response.text
+def run_chimera(img, model):
+    try:
+        img_obj = Image.open(img)
+        res = client.models.generate_content(
+            model=model, contents=[img_obj, "SITREP: Was siehst du? Personen, Text, Gefahren, Kontext."],
+            config=GenerateContentConfig(system_instruction="CHIMERA VISUAL RECON")
+        )
+        return res.text
+    except Exception as e: return f"VISUAL ERROR: {e}"
 
-            full_prompt = f"SUBSTANZ (TEXT):\n{text[:2000]}\n\nBEWEISKETTE (ZUSAMMENFASSUNG DER SUCHERGEBNISSE):\n{evidence}"
-        elif input_type == "image":
-            image = Image.open(io.BytesIO(input_data.getvalue()))
-            full_prompt = [image, "Führe eine forensische Analyse dieses Bildes durch und gib dein Urteil im angeforderten JSON-Format aus."]
+# 6. MAIN INTERFACE (TABS)
+st.markdown('<div style="text-align:center; font-family:monospace; color:#666; margin-bottom:5px;">DARK CHILD v3.5</div>', unsafe_allow_html=True)
 
-        system_prompt = f"DU BIST 'DARK KNIGHT CHILD' IM FORENSIK-MODUS. Fasse ein Urteil basierend auf der Beweiskette. OUTPUT FORMAT (NUR JSON): {{ \"fake_suspicion\": \"Gering|Mittel|Hoch|Kritisch\", \"verdict\": \"...\", \"evidence_chain\": [\"...\"] }}"
-        model_with_prompt = genai.GenerativeModel(MODEL_NAME, system_instruction=system_prompt)
-        response = model_with_prompt.generate_content(full_prompt, generation_config=GenerationConfig(response_mime_type="application/json"))
+tab_scan, tab_check, tab_audio, tab_cam = st.tabs(["📡 SCAN", "🛡️ CHECK", "🎙️ AUDIO", "👁️ CAM"])
 
-        cleaned_response_text = response.text.strip().replace("```json", "").replace("```", "")
-        return json.loads(cleaned_response_text)
+# --- TAB 1: SCAN ---
+with tab_scan:
+    query = st.text_area("ZIEL / THEMA", height=70, placeholder="Leer = Global News Update")
+    if st.button("SCAN STARTEN", use_container_width=True, type="primary"):
+        q = query if query else "SCAN: BREAKING NEWS (GLOBAL & TECH) - UPDATE"
+        with st.status("Scanning...", expanded=True) as status:
+            res = run_tactical_scan(q, scan_count, scan_style, scan_gain, selected_model)
+            status.update(label="Scan Complete", state="complete", expanded=False)
+            st.markdown(f'<div class="mobile-output">{res}</div>', unsafe_allow_html=True)
 
-    except Exception as e:
-        st.error(f"FORENSIK-FEHLER IM KERN: {e}")
-        return {"error": str(e), "fake_suspicion": "KRITISCH", "verdict": "Systemfehler während der Analyse.", "evidence_chain": [str(e)]}
+# --- TAB 2: CERBERUS ---
+with tab_check:
+    check_input = st.text_area("TEXT ODER URL", height=100, placeholder="Paste Text oder Link...")
+    check_img = st.file_uploader("ODER BILD UPLOAD", type=["jpg", "png"], label_visibility="collapsed")
 
-def display_forensic_dossier(dossier):
-    suspicion = dossier.get('fake_suspicion', 'Unbekannt').lower()
-    if suspicion == 'gering': v_class = "verdict-safe"
-    elif suspicion == 'mittel': v_class = "verdict-warn"
-    else: v_class = "verdict-danger"
-    evidence_html = "".join(f"<li>{item}</li>" for item in dossier.get('evidence_chain', []))
-    st.markdown(f"""<div class='mobile-output'><p><b>FAKE-VERDACHT:</b> <span class='{v_class}'>{dossier.get('fake_suspicion', 'N/A')}</span></p><p><b>URTEIL:</b> {dossier.get('verdict', 'N/A')}</p><hr><p><b>BEWEISKETTE:</b></p><ul>{evidence_html}</ul></div>""", unsafe_allow_html=True)
+    if st.button("VERIFIZIEREN", use_container_width=True):
+        if not check_input and not check_img:
+            st.warning("Kein Input.")
+        else:
+            with st.status("Forensik läuft...", expanded=True) as status:
+                if check_img:
+                    dossier = run_cerberus(check_img, "image", selected_model)
+                else:
+                    dossier = run_cerberus(check_input, "auto", selected_model)
+                status.update(label="Dossier erstellt", state="complete", expanded=False)
 
-# 4. INTERFACE
-st.markdown('<div class="mobile-title">DARK CHILD</div>', unsafe_allow_html=True)
-st.caption("Protokoll Janus: Taktische Aufklärung & Forensische Verifikation")
-mode = st.radio("Operationsmodus:", ["📡 Taktischer Scan", "🛡️ Forensische Verifikation"], horizontal=True)
-if "last_output" not in st.session_state: st.session_state.last_output = None
+                # Render Dossier
+                susp = dossier.get('fake_suspicion', 'N/A')
+                color = "verdict-safe" if "gering" in susp.lower() else "verdict-danger"
+                ev_html = "".join(f"<li>{x}</li>" for x in dossier.get('evidence', []))
+                st.markdown(f"""<div class='mobile-output'>
+                    <div>RISIKO: <span class='{color}'>{susp.upper()}</span></div>
+                    <div style='margin-top:5px; font-weight:bold;'>{dossier.get('verdict')}</div>
+                    <hr style='margin:10px 0; border-color:#333;'>
+                    <ul style='padding-left:20px; margin:0;'>{ev_html}</ul>
+                </div>""", unsafe_allow_html=True)
 
-if mode == "📡 Taktischer Scan":
-    with st.expander("⚙️ TAKTIK & QUANTITÄT"):
-        msg_count = st.slider("Anzahl", 1, 10, 3); gain = st.slider("Tiefe", 0, 100, 90); style = st.select_slider("Stil", options=["TROCKEN", "FORENSISCH", "AMARONE"], value="FORENSISCH")
-    query = st.text_area("SIGNAL", height=80, placeholder="Leer lassen für Auto-Scan...")
-    if st.button("SENDEN / REFRESH"):
-        active_query = query if query else "SCAN: BREAKING NEWS (GLOBAL & TECH) - UPDATE"
-        with st.spinner("Uplink..."): st.session_state.last_output = {"type": "scan", "content": run_tactical_scan(active_query, msg_count, style, gain)}
-else:
-    sub_mode_text, sub_mode_url, sub_mode_img = st.tabs(["TEXT", "URL", "BILD"])
-    with sub_mode_text:
-        text_input = st.text_area("Text:", height=150)
-        if st.button("VERIFIZIEREN (TEXT)"):
-            if text_input:
-                with st.spinner("Kreuzverhör..."): st.session_state.last_output = {"type": "verification", "content": run_forensic_verification(text_input, "text")}
-    with sub_mode_url:
-        url_input = st.text_input("URL:")
-        if st.button("VERIFIZIEREN (URL)"):
-            if url_input:
-                with st.spinner("Extraktion & Kreuzverhör..."): st.session_state.last_output = {"type": "verification", "content": run_forensic_verification(url_input, "url")}
-    with sub_mode_img:
-        img_input = st.file_uploader("Bild:", type=["jpg", "jpeg", "png"])
-        if st.button("VERIFIZIEREN (BILD)"):
-            if img_input:
-                with st.spinner("Pixel-Analyse..."): st.session_state.last_output = {"type": "verification", "content": run_forensic_verification(img_input, "image")}
+# --- TAB 3: WIRETAP ---
+with tab_audio:
+    st.info("🎙️ Sprich deine Beobachtung oder Frage.")
+    audio_val = st.audio_input("REC", label_visibility="collapsed")
+    if audio_val:
+        with st.spinner("Analysiere Audio..."):
+            res = run_wiretap(audio_val.read(), selected_model)
+            st.markdown(f'<div class="mobile-output">{res}</div>', unsafe_allow_html=True)
 
-# 6. ANZEIGE
-st.markdown("---")
-if st.session_state.last_output:
-    if st.session_state.last_output["type"] == "scan":
-        st.markdown(f'<div class="mobile-output">{st.session_state.last_output["content"]}</div>', unsafe_allow_html=True)
-    elif st.session_state.last_output["type"] == "verification":
-        display_forensic_dossier(st.session_state.last_output["content"])
+# --- TAB 4: CHIMERA ---
+with tab_cam:
+    st.info("👁️ Mache ein Foto zur Analyse.")
+    cam_val = st.camera_input("SNAP", label_visibility="collapsed")
+    if cam_val:
+        with st.spinner("Analysiere Bild..."):
+            res = run_chimera(cam_val, selected_model)
+            st.markdown(f'<div class="mobile-output">{res}</div>', unsafe_allow_html=True)
